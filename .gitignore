@@ -44,3 +44,6 @@ app.*.map.json
 
 # Keystore files
 .env
+
+# exclude lib/groq_service_keys.dart
+lib/groq_service_keys.dart

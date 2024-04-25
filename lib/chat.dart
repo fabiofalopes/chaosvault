@@ -1,5 +1,6 @@
-import 'package:app_agent/groqcloud_service.dart';
 import 'package:flutter/material.dart';
+import 'package:app_agent/groq_service.dart';
+import 'package:logging/logging.dart';
 
 class Chat extends StatefulWidget {
   @override
@@ -9,16 +10,15 @@ class Chat extends StatefulWidget {
 class _ChatState extends State<Chat> {
   final TextEditingController _controller = TextEditingController();
   final List<Message> _messages = [];
-  
-  //TODO: Fetch from groq api 
+  late String _selectedModel;
   List<String> _modelList = ['llama3-70b-8192', 'Model_02', 'Model_03'];
-  late String _selectedModel; 
+
   @override
   void initState() {
     super.initState();
-    _selectedModel = _modelList[0]; // Initialize selected model here
+    _selectedModel = _modelList[0];
   }
-  //--------------------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,7 +31,7 @@ class _ChatState extends State<Chat> {
             value: _selectedModel,
             onChanged: (String? newValue) {
               setState(() {
-                _selectedModel = newValue ?? _selectedModel; // Ensure newValue is not null
+                _selectedModel = newValue ?? _selectedModel;
               });
             },
             items: _modelList.map<DropdownMenuItem<String>>((String value) {
@@ -41,8 +41,17 @@ class _ChatState extends State<Chat> {
               );
             }).toList(),
           ),
-          // Widget builds the messages list
-          _buildMessagesList(),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                final message = _messages[index];
+                return MessageBubble(
+                  message: message,
+                );
+              },
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -69,80 +78,24 @@ class _ChatState extends State<Chat> {
     );
   }
 
-  /* Method to build the messages list
-  Widget _buildMessagesList() {
-    return Expanded(
-      child: ListView.builder(
-        itemCount: _messages.length,
-        itemBuilder: (context, index) {
-          final message = _messages[index];
-          return MessageBubble(
-            message: message,
-          );
-        },
-      ),
-    );
-  }
-  */
-
-  // Method to build the messages list
-Widget _buildMessagesList() {
-  return FutureBuilder(
-    future: _fetchMessages(), // Call the method to fetch messages
-    builder: (context, AsyncSnapshot<dynamic> snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return Center(
-          child: CircularProgressIndicator(),
-        );
-      } else if (snapshot.hasError) {
-        return Center(
-          child: Text('Error: ${snapshot.error}'),
-        );
-      } else {
-        // Data has been successfully fetched
-        // You can process the snapshot.data here
-        // For now, return a ListView.builder with dummy data
-        return Expanded(
-          child: ListView.builder(
-            itemCount: _messages.length,
-            itemBuilder: (context, index) {
-              final message = _messages[index];
-              return MessageBubble(
-                message: message,
-              );
-            },
-          ),
-        );
-      }
-    },
-  );
-}
-
-// Method to fetch messages from the API
-Future<dynamic> _fetchMessages() async {
-  try {
-    // Instantiate GroqCloudService
-    GroqCloudService groqCloudService = GroqCloudService();
-
-    String response = groqCloudService.toString();
-    _messages.add(Message(text: response, role: MessageRole.system));
-
-    return response;
-  } catch (e) {
-    // Handle any errors
-    return null;
-  }
-}
-
-
-
-
-
-  void _handleSendMessage() {
+  Future<void> _handleSendMessage() async {
     if (_controller.text.isNotEmpty) {
-      setState(() {
-        _messages.add(Message(text: _controller.text, role: MessageRole.user));
-        _controller.clear();
+      final completion = await GroqService().getChatCompletion(_controller.text);
+      setState((){
+        try {
+          _messages.add(Message(text: _controller.text, role: MessageRole.user));
+          if (completion.isNotEmpty) {
+            _messages.add(Message(text: completion, role: MessageRole.system));
+          } else {
+            _messages.add(Message(text: 'No completion received', role: MessageRole.system));
+          } 
+          //_messages.add(Message(text: completion, role: MessageRole.system));
+        } catch (e) {
+          // log error
+          Logger('Chat').severe('Error sending message: $e');
+        // Handle error (e.g., show error message to the user)
+      }  
+      _controller.clear();
       });
     }
   }
